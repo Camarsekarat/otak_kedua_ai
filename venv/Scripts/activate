@@ -41,12 +41,12 @@ case "$(uname)" in
     CYGWIN*|MSYS*|MINGW*)
         # transform D:\path\to\venv to /d/path/to/venv on MSYS and MINGW
         # and to /cygdrive/d/path/to/venv on Cygwin
-        VIRTUAL_ENV=$(cygpath 'D:\pak isa\APLIKASI\otak_kedua_ai\venv')
+        VIRTUAL_ENV=$(cygpath 'D:\isa nitiip\otak_kedua_ai\venv')
         export VIRTUAL_ENV
         ;;
     *)
         # use the path as-is
-        export VIRTUAL_ENV='D:\pak isa\APLIKASI\otak_kedua_ai\venv'
+        export VIRTUAL_ENV='D:\isa nitiip\otak_kedua_ai\venv'
         ;;
 esac
 
