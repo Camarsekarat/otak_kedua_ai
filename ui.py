@@ -71,18 +71,25 @@ def sync_data():
 
 def tanya_ai(pesan):
     try:
-        # ... (kode lu yang lama sampai baris invoke)
+        if not os.path.exists(db_path):
+            return "Waduh, gue belum punya ingatan. Klik 'Sync' dulu di sebelah kiri!"
+        
+        db = FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
+        results = db.similarity_search(pesan, k=3)
+        
+        context = "\n\n".join([d.page_content for d in results])
+        
+        # INI DIA: Pastiin baris ini ada sebelum llm.invoke
+        prompt = f"Gunakan konteks ini untuk menjawab: {context}\n\n Pertanyaan: {pesan}"
+        
         response = llm.invoke(prompt)
         
-        # CEK DI SINI: Kalau isinya list, kita ambil teks utamanya aja
+        # Saringan biar nggak muncul format list kodingan
         if isinstance(response.content, list):
-            # Kita cari kunci 'text' di dalam list tersebut
             return response.content[0].get('text', str(response.content))
-        
-        # Kalau ternyata udah string biasa, langsung balikin
         return response.content
     except Exception as e:
-        return f"Waduh, ada error pas nanya: {e}"
+        return f"Error pas nanya: {e}"
 # --- 3. UI STREAMLIT (WAJAH) ---
 
 st.set_page_config(page_title="Otak Kedua Irfanka", page_icon="🧠")
