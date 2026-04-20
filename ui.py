@@ -74,7 +74,7 @@ def simpan_atau_update_memori(file_selection, judul_baru, isi):
                 'parents': [FOLDER_ID], 
                 'mimeType': 'application/vnd.google-apps.document'
             }
-            media = MediaIoBaseUpload(io.BytesIO(isi.encode('utf-8')), mimetype='text/plain', resumable=True)
+            media = MediaIoBaseUpload(io.BytesIO(isi.encode('utf-8')), mimetype='text/plain', resumable=False)
             file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
             file_id = file.get('id')
 
@@ -94,7 +94,7 @@ def simpan_atau_update_memori(file_selection, judul_baru, isi):
             file_id = next(f['id'] for f in st.session_state.file_list if f['name'] == file_selection)
             old = service.files().export_media(fileId=file_id, mimeType='text/plain').execute().decode('utf-8')
             new_text = old + "\n\n---\nUpdate:\n" + isi
-            media = MediaIoBaseUpload(io.BytesIO(new_text.encode('utf-8')), mimetype='text/plain', resumable=True)
+            media = MediaIoBaseUpload(io.BytesIO(new_text.encode('utf-8')), mimetype='text/plain', resumable=False)
             service.files().update(fileId=file_id, media_body=media).execute()
             
         fetch_files()
@@ -133,26 +133,7 @@ with st.popover("⚙️ Menu & Billing", use_container_width=True):
         ok, msg = kosongkan_sampah_kurir()
         if ok: st.success(msg)
         else: st.error(msg)
-
-def hard_reset_kurir():
-    try:
-        service = get_drive_service()
-        # 1. Kosongkan sampah permanen
-        service.files().emptyTrash().execute()
         
-        # 2. Cek kuota asli (buat pembuktian logis)
-        about = service.about().get(fields="storageQuota").execute()
-        usage = int(about['storageQuota']['usage']) / (1024**3) # Convert ke GB
-        limit = int(about['storageQuota']['limit']) / (1024**3)
-        
-        return f"Sampah dibuang. Penggunaan: {usage:.2f} GB / {limit:.2f} GB"
-    except Exception as e:
-        return f"Gagal: {e}"
-
-# Panggil fungsi ini lewat satu tombol sementara di UI
-if st.button("🚨 FIX QUOTA (Hard Reset)"):
-    hasil = hard_reset_kurir()
-    st.write(hasil)
 
 # --- 4. TOP BAR UI ---
 col_t, col_s = st.columns([0.7, 0.3])
