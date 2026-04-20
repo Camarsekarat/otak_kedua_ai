@@ -9,149 +9,137 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 
-# --- 1. KONFIGURASI HALAMAN & THEME ---
+# --- 1. CONFIG & SECRETS ---
 st.set_page_config(page_title="Otak Kedua Irfanka", page_icon="🧠", layout="wide")
 
-# Ambil data rahasia dari Streamlit Secrets
 try:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
     FOLDER_ID = st.secrets["GDRIVE_FOLDER_ID"]
     creds_info = json.loads(st.secrets["SERVICE_ACCOUNT_JSON"])
-    
-    # Inisialisasi API Google
     genai.configure(api_key=API_KEY)
     os.environ["GOOGLE_API_KEY"] = API_KEY
 except Exception as e:
-    st.error("Waduh, cek dashboard Secrets lu. Kayaknya ada yang belum di-input!")
+    st.error("Secrets belum lengkap di dashboard Streamlit!")
     st.stop()
 
-# --- 2. SIDEBAR (PENGATURAN & MODEL) ---
+# --- 2. SIDEBAR REVISION (Logo Atas, Pengaturan Bawah) ---
 with st.sidebar:
-    st.title("⚙️ Pengaturan")
+    # Bagian Atas: Logo
+    st.markdown("<h1 style='text-align: center;'>🧠</h1>", unsafe_allow_html=True)
+    st.title("Otak Kedua")
+    st.caption("v2.5 - Personal Knowledge Assistant")
     
-    # Model Selector: Pilih otak AI lu di sini
+    # Trik CSS untuk dorong konten ke bawah
+    st.markdown("""
+        <style>
+            [data-testid="stSidebarNav"] {display: none;}
+            .spacer { margin-top: 55vh; }
+        </style>
+        <div class="spacer"></div>
+    """, unsafe_allow_html=True)
+    
+    # Bagian Bawah: Pengaturan
+    st.markdown("---")
+    st.subheader("⚙️ Pengaturan")
     selected_model = st.selectbox(
         "Pilih Model AI:",
-        ["gemini-2.5-flash", "gemini-1.5-pro"],
-        index=0,
-        help="Flash: Cepat & Murah (Recommended). Pro: Paling Pinter & Mahal."
+        ["gemini-2.5-flash", "gemini-2.5-pro"],
+        index=0
     )
     
-    st.markdown("---")
-    if st.button("🗑️ Hapus Riwayat Chat"):
+    if st.button("🗑️ Hapus Riwayat Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-# Inisialisasi Mesin AI (LLM & Embeddings)
+# Inisialisasi Engine (Pake 2.5 Flash sesuai saran)
 embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY)
 llm = ChatGoogleGenerativeAI(model=selected_model, temperature=0.3, google_api_key=API_KEY)
 db_path = "db_ingatan_faiss"
 
-# --- 3. FUNGSI LOGIKA (OTAK BELAKANG) ---
-
+# --- 3. LOGIKA BACKEND ---
 def sync_data():
-    """Fungsi buat sedot data dari GDocs ke memori FAISS"""
     try:
         creds = service_account.Credentials.from_service_account_info(
             creds_info, scopes=['https://www.googleapis.com/auth/drive.readonly']
         )
         service = build('drive', 'v3', credentials=creds)
-        
-        # Cari file di folder GDrive
         query = f"'{FOLDER_ID}' in parents and trashed=false"
         results = service.files().list(q=query, fields="files(id, name, mimeType)").execute()
         items = results.get('files', [])
         
-        if not items:
-            return "error", "Foldernya kosong beneran, Bre!"
+        if not items: return "error", "Folder kosong!"
             
         docs = []
         for item in items:
-            # Cuma ambil file Google Docs
             if item['mimeType'] == 'application/vnd.google-apps.document':
                 request = service.files().export_media(fileId=item['id'], mimeType='text/plain')
                 teks = request.execute().decode('utf-8')
                 if teks.strip():
                     docs.append(Document(page_content=teks, metadata={"source": item['name']}))
         
-        if not docs:
-            return "error", "Gak ada teks yang bisa disedot dari Google Docs lu."
+        if not docs: return "error", "Gak ada file Google Docs."
 
-        # Potong-potong teks biar AI gampang bacanya (Chunking)
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = splitter.split_documents(docs)
-        
-        # Simpan ke database lokal (FAISS)
         vectorstore = FAISS.from_documents(chunks, embeddings)
         vectorstore.save_local(db_path)
-        
         return "success", len(chunks)
     except Exception as e:
         return "error", str(e)
 
 def tanya_ai(pesan):
-    """Fungsi buat nanya ke AI pake data dari FAISS"""
     try:
         if not os.path.exists(db_path):
-            return "Gue belum punya ingatan. Klik tombol 'Sync' dulu di bawah!"
+            return "Ingatan kosong. Klik 'Sync' dulu!"
         
-        # Load database FAISS
         db = FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
-        
-        # Cari potongan teks yang paling relevan (k=2 buat hemat token)
-        results = db.similarity_search(pesan, k=2)
-        
+        results = db.similarity_search(pesan, k=2) # k=2 biar irit token tapi tetep akurat
         context = "\n\n".join([d.page_content for d in results])
-        prompt = f"Gunakan konteks ini untuk menjawab: {context}\n\n Pertanyaan: {pesan}"
+        prompt = f"Gunakan konteks ini: {context}\n\nPertanyaan: {pesan}"
         
-        # Panggil Gemini
         response = llm.invoke(prompt)
         
-        # Bersihkan output (biar gak muncul format kodingan)
+        # Bersihkan format output biar gak muncul JSON/List
         if isinstance(response.content, list):
             return response.content[0].get('text', str(response.content))
         return response.content
     except Exception as e:
-        return f"Error pas nanya: {e}"
+        return f"Error: {e}"
 
-# --- 4. TAMPILAN CHAT (FRONTEND) ---
-st.title("🧠 Otak Kedua Irfanka")
+# --- 4. MAIN UI ---
+st.markdown(f"<h1>🧠 Otak Kedua Irfanka</h1>", unsafe_allow_html=True)
 
-# Inisialisasi riwayat chat di session state
+# Status Bar & Sync
+col_sync, col_status = st.columns([1, 3])
+with col_sync:
+    if st.button("🔄 Sync Memori", use_container_width=True):
+        with st.spinner("Menyerap data..."):
+            status, msg = sync_data()
+            if status == "success":
+                st.toast(f"Berhasil menyerap {msg} memori!", icon="✅")
+            else:
+                st.error(msg)
+with col_status:
+    st.info(f"📍 Model: {selected_model} | Billing: Pay-as-you-go", icon="ℹ️")
+
+st.markdown("---")
+
+# Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Tampilkan semua pesan dari riwayat
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Kotak input chat
+# Input
 if p := st.chat_input("Tanya soal jadwal, strategi parfum, atau data PKL..."):
-    # Simpan chat user
     st.session_state.messages.append({"role": "user", "content": p})
     with st.chat_message("user"):
         st.markdown(p)
 
-    # Respon AI
     with st.chat_message("assistant"):
-        with st.spinner("Lagi nyari di ingatan..."):
+        with st.spinner("Mikir..."):
             jawaban = tanya_ai(p)
             st.markdown(jawaban)
             st.session_state.messages.append({"role": "assistant", "content": jawaban})
-
-# --- 5. CONTROL PANEL (FOOTER) ---
-st.markdown("---")
-col1, col2 = st.columns([1, 4])
-
-with col1:
-    if st.button("🔄 Sync Memori"):
-        with st.spinner("Menyerap data..."):
-            status, msg = sync_data()
-            if status == "success":
-                st.toast(f"Mantap! {msg} memori berhasil diserap.", icon="✅")
-            else:
-                st.error(msg)
-
-with col2:
-    st.caption(f"📍 Model Aktif: {selected_model} | Status Billing: Pay-as-you-go")
