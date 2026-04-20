@@ -114,6 +114,26 @@ def sync_data():
         return "success", len(chunks)
     except Exception as e: return "error", str(e)
 
+def kosongkan_sampah_kurir():
+    try:
+        service = get_drive_service()
+        # Perintah sakti buat ngosongin sampah si Service Account
+        service.files().emptyTrash().execute()
+        return True, "Sampah kurir berhasil dibuang! Ransel kosong lagi."
+    except Exception as e:
+        return False, f"Gagal bersih-bersih: {e}"
+
+# --- Di bagian Menu & Billing (Popover), tambahin tombol ini ---
+with st.popover("⚙️ Menu & Billing", use_container_width=True):
+    # ... (kodingan billing lu yang lama) ...
+    
+    st.divider()
+    st.subheader("🧹 Maintenance")
+    if st.button("🗑️ Kosongkan Sampah Kurir (Fix 403)", use_container_width=True):
+        ok, msg = kosongkan_sampah_kurir()
+        if ok: st.success(msg)
+        else: st.error(msg)
+
 # --- 4. TOP BAR UI ---
 col_t, col_s = st.columns([0.7, 0.3])
 with col_t:
