@@ -1,9 +1,11 @@
 import streamlit as st
 import os
 import json
+import io
 import google.generativeai as genai
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -18,51 +20,37 @@ try:
     creds_info = json.loads(st.secrets["SERVICE_ACCOUNT_JSON"])
     genai.configure(api_key=API_KEY)
     os.environ["GOOGLE_API_KEY"] = API_KEY
+    # Ubah scope biar bisa nulis/bikin file di Drive
+    SCOPES = ['https://www.googleapis.com/auth/drive']
 except Exception as e:
-    st.error("Secrets belum lengkap di dashboard Streamlit!")
+    st.error("Secrets lu bermasalah, Bre!")
     st.stop()
 
-# --- 2. SIDEBAR REVISION (Logo Atas, Pengaturan Bawah) ---
-with st.sidebar:
-    # Bagian Atas: Logo
-    st.markdown("<h1 style='text-align: center;'>🧠</h1>", unsafe_allow_html=True)
-    st.title("Otak Kedua")
-    st.caption("v2.5 - Personal Knowledge Assistant")
-    
-    # Trik CSS untuk dorong konten ke bawah
-    st.markdown("""
-        <style>
-            [data-testid="stSidebarNav"] {display: none;}
-            .spacer { margin-top: 55vh; }
-        </style>
-        <div class="spacer"></div>
-    """, unsafe_allow_html=True)
-    
-    # Bagian Bawah: Pengaturan
-    st.markdown("---")
-    st.subheader("⚙️ Pengaturan")
-    selected_model = st.selectbox(
-        "Pilih Model AI:",
-        ["gemini-2.5-flash", "gemini-2.5-pro"],
-        index=0
-    )
-    
-    if st.button("🗑️ Hapus Riwayat Chat", use_container_width=True):
-        st.session_state.messages = []
-        st.rerun()
+# --- 2. LOGIKA BACKEND ---
 
-# Inisialisasi Engine (Pake 2.5 Flash sesuai saran)
-embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY)
-llm = ChatGoogleGenerativeAI(model=selected_model, temperature=0.3, google_api_key=API_KEY)
-db_path = "db_ingatan_faiss"
+def get_drive_service():
+    creds = service_account.Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    return build('drive', 'v3', credentials=creds)
 
-# --- 3. LOGIKA BACKEND ---
-def sync_data():
+def simpan_memori_baru(judul, isi):
+    """Bikin file Google Doc baru langsung di folder tujuan"""
     try:
-        creds = service_account.Credentials.from_service_account_info(
-            creds_info, scopes=['https://www.googleapis.com/auth/drive.readonly']
-        )
-        service = build('drive', 'v3', credentials=creds)
+        service = get_drive_service()
+        file_metadata = {
+            'name': judul,
+            'parents': [FOLDER_ID],
+            'mimeType': 'application/vnd.google-apps.document'
+        }
+        media = MediaIoBaseUpload(io.BytesIO(isi.encode('utf-8')), mimetype='text/plain', resumable=True)
+        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        return True, "Memori berhasil disimpan ke G-Drive!"
+    except Exception as e:
+        return False, str(e)
+
+def sync_data():
+    """Sedot data dari GDocs ke FAISS"""
+    try:
+        service = get_drive_service()
         query = f"'{FOLDER_ID}' in parents and trashed=false"
         results = service.files().list(q=query, fields="files(id, name, mimeType)").execute()
         items = results.get('files', [])
@@ -77,54 +65,62 @@ def sync_data():
                 if teks.strip():
                     docs.append(Document(page_content=teks, metadata={"source": item['name']}))
         
-        if not docs: return "error", "Gak ada file Google Docs."
+        if not docs: return "error", "Gak ada teks di Google Docs."
 
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = splitter.split_documents(docs)
         vectorstore = FAISS.from_documents(chunks, embeddings)
-        vectorstore.save_local(db_path)
+        vectorstore.save_local("db_ingatan_faiss")
         return "success", len(chunks)
     except Exception as e:
         return "error", str(e)
 
-def tanya_ai(pesan):
-    try:
-        if not os.path.exists(db_path):
-            return "Ingatan kosong. Klik 'Sync' dulu!"
-        
-        db = FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
-        results = db.similarity_search(pesan, k=2) # k=2 biar irit token tapi tetep akurat
-        context = "\n\n".join([d.page_content for d in results])
-        prompt = f"Gunakan konteks ini: {context}\n\nPertanyaan: {pesan}"
-        
-        response = llm.invoke(prompt)
-        
-        # Bersihkan format output biar gak muncul JSON/List
-        if isinstance(response.content, list):
-            return response.content[0].get('text', str(response.content))
-        return response.content
-    except Exception as e:
-        return f"Error: {e}"
+# Inisialisasi AI
+embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY)
+db_path = "db_ingatan_faiss"
 
-# --- 4. MAIN UI ---
-st.markdown(f"<h1>🧠 Otak Kedua Irfanka</h1>", unsafe_allow_html=True)
+# --- 3. SIDEBAR (LOGO, INPUT, SETTINGS) ---
+with st.sidebar:
+    st.markdown("<h1 style='text-align: center;'>🧠</h1>", unsafe_allow_html=True)
+    st.title("Otak Kedua")
+    
+    # Fitur Input Baru
+    st.markdown("---")
+    st.subheader("📝 Catat Memori Baru")
+    new_title = st.text_input("Judul Catatan (misal: Ide Konten Senin)")
+    new_content = st.text_area("Apa yang mau diingat?", placeholder="Tulis strategi parfum atau jadwal baru di sini...")
+    
+    if st.button("🚀 Simpan ke Drive", use_container_width=True):
+        if new_title and new_content:
+            with st.spinner("Mengirim ke Drive..."):
+                ok, msg = simpan_memori_baru(new_title, new_content)
+                if ok: st.success(msg)
+                else: st.error(msg)
+        else:
+            st.warning("Judul dan isi jangan kosong, Bre!")
 
-# Status Bar & Sync
-col_sync, col_status = st.columns([1, 3])
-with col_sync:
+    # Push Settings to Bottom
+    st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.subheader("⚙️ Pengaturan")
+    
+    selected_model = st.selectbox("Pilih Otak AI:", ["gemini-2.5-flash", "gemini-2.5-pro"])
+    llm = ChatGoogleGenerativeAI(model=selected_model, temperature=0.3, google_api_key=API_KEY)
+    
     if st.button("🔄 Sync Memori", use_container_width=True):
         with st.spinner("Menyerap data..."):
             status, msg = sync_data()
-            if status == "success":
-                st.toast(f"Berhasil menyerap {msg} memori!", icon="✅")
-            else:
-                st.error(msg)
-with col_status:
-    st.info(f"📍 Model: {selected_model} | Billing: Pay-as-you-go", icon="ℹ️")
+            if status == "success": st.toast(f"Berhasil serap {msg} data!", icon="✅")
+            else: st.error(msg)
+            
+    if st.button("🗑️ Hapus Chat", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
-st.markdown("---")
+# --- 4. MAIN CHAT UI ---
+st.markdown("<h1>🤖 Chat Assistant</h1>", unsafe_allow_html=True)
+st.caption(f"📍 Model: {selected_model}")
 
-# Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -132,14 +128,22 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Input
-if p := st.chat_input("Tanya soal jadwal, strategi parfum, atau data PKL..."):
+if p := st.chat_input("Tanya soal jadwal atau strategi @irfankaisa..."):
     st.session_state.messages.append({"role": "user", "content": p})
-    with st.chat_message("user"):
-        st.markdown(p)
+    with st.chat_message("user"): st.markdown(p)
 
     with st.chat_message("assistant"):
-        with st.spinner("Mikir..."):
-            jawaban = tanya_ai(p)
+        with st.spinner("Mencari jawaban..."):
+            # Logika tanya_ai terintegrasi di sini
+            if not os.path.exists(db_path):
+                jawaban = "Ingatan kosong. Sync dulu di sidebar!"
+            else:
+                db = FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
+                results = db.similarity_search(p, k=2)
+                context = "\n\n".join([d.page_content for d in results])
+                prompt = f"Konteks: {context}\n\nPertanyaan: {p}"
+                response = llm.invoke(prompt)
+                jawaban = response.content[0].get('text', str(response.content)) if isinstance(response.content, list) else response.content
+            
             st.markdown(jawaban)
             st.session_state.messages.append({"role": "assistant", "content": jawaban})
