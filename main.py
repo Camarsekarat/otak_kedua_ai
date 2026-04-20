@@ -15,6 +15,16 @@ from googleapiclient.discovery import build
 # VECTOR DB BARU KITA: FAISS
 from langchain_community.vectorstores import FAISS
 
+import streamlit as st
+import json
+from google.oauth2 import service_account
+
+# Ambil string JSON dari secrets
+creds_dict = json.loads(st.secrets["SERVICE_ACCOUNT_JSON"])
+
+# Gunakan credentials ini buat konek ke GDrive
+creds = service_account.Credentials.from_service_account_info(creds_dict)
+
 load_dotenv()
 
 # Setup Otomatis credentials.json
