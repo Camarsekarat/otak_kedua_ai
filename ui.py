@@ -134,6 +134,26 @@ with st.popover("⚙️ Menu & Billing", use_container_width=True):
         if ok: st.success(msg)
         else: st.error(msg)
 
+def hard_reset_kurir():
+    try:
+        service = get_drive_service()
+        # 1. Kosongkan sampah permanen
+        service.files().emptyTrash().execute()
+        
+        # 2. Cek kuota asli (buat pembuktian logis)
+        about = service.about().get(fields="storageQuota").execute()
+        usage = int(about['storageQuota']['usage']) / (1024**3) # Convert ke GB
+        limit = int(about['storageQuota']['limit']) / (1024**3)
+        
+        return f"Sampah dibuang. Penggunaan: {usage:.2f} GB / {limit:.2f} GB"
+    except Exception as e:
+        return f"Gagal: {e}"
+
+# Panggil fungsi ini lewat satu tombol sementara di UI
+if st.button("🚨 FIX QUOTA (Hard Reset)"):
+    hasil = hard_reset_kurir()
+    st.write(hasil)
+
 # --- 4. TOP BAR UI ---
 col_t, col_s = st.columns([0.7, 0.3])
 with col_t:
