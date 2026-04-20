@@ -65,22 +65,42 @@ def fetch_files():
 def simpan_atau_update_memori(file_selection, judul_baru, isi):
     try:
         service = get_drive_service()
+        # GANTI INI: Masukin email Google utama lu yang punya 5 TB itu
+        EMAIL_UTAMA = "email_lu_yang_5tb@gmail.com" 
+
         if file_selection == "➕ Buat Catatan Baru":
-            # Bikin file baru
-            file_metadata = {'name': judul_baru, 'parents': [FOLDER_ID], 'mimeType': 'application/vnd.google-apps.document'}
+            file_metadata = {
+                'name': judul_baru, 
+                'parents': [FOLDER_ID], 
+                'mimeType': 'application/vnd.google-apps.document'
+            }
             media = MediaIoBaseUpload(io.BytesIO(isi.encode('utf-8')), mimetype='text/plain', resumable=True)
-            service.files().create(body=file_metadata, media_body=media).execute()
+            file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+            file_id = file.get('id')
+
+            # --- JURUS PINDAH EMBER ---
+            # Kita kasih izin 'owner' ke email utama lu
+            permission = {
+                'type': 'user',
+                'role': 'owner',
+                'emailAddress': EMAIL_UTAMA
+            }
+            # transferOwnership=True wajib buat mindahin beban kuota
+            service.permissions().create(fileId=file_id, body=permission, transferOwnership=True).execute()
+
         else:
-            # Append ke file lama
-            f_id = next(f['id'] for f in st.session_state.file_list if f['name'] == file_selection)
-            old = service.files().export_media(fileId=f_id, mimeType='text/plain').execute().decode('utf-8')
+            # Kalau update file lama, biasanya owner-nya udah lu (kalo udah di-transfer sebelumnya)
+            # Jadi aman, tinggal update aja.
+            file_id = next(f['id'] for f in st.session_state.file_list if f['name'] == file_selection)
+            old = service.files().export_media(fileId=file_id, mimeType='text/plain').execute().decode('utf-8')
             new_text = old + "\n\n---\nUpdate:\n" + isi
             media = MediaIoBaseUpload(io.BytesIO(new_text.encode('utf-8')), mimetype='text/plain', resumable=True)
-            service.files().update(fileId=f_id, media_body=media).execute()
+            service.files().update(fileId=file_id, media_body=media).execute()
+            
         fetch_files()
-        return True, "Memori tersimpan!"
-    except Exception as e: return False, str(e)
-
+        return True, "Memori tersimpan di ember lu, Bre!"
+    except Exception as e: 
+        return False, f"Gagal pindah ember: {e}"
 def sync_data():
     try:
         service = get_drive_service()
