@@ -194,7 +194,6 @@ if st.session_state.get("authentication_status"):
             st.session_state.current_topic = new_id
             st.rerun()
         st.divider()
-
         def render_topic_item(topic, pinned):
             c1, c2 = st.columns([0.8, 0.2])
             with c1:
