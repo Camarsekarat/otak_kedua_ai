@@ -1,2 +1,6 @@
 .env
 credentials.json
+.venv/
+.streamlit/secrets.toml
+memori_offline/
+db_offline/
