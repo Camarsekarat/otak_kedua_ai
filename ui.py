@@ -27,12 +27,12 @@ except FileNotFoundError:
     st.stop()
 
 # Nyalain mesin autentikasi
+# Nyalain mesin autentikasi
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
-    config['cookie']['expiry_days'],
-    config['preauthorized']
+    config['cookie']['expiry_days']
 )
 
 # Render UI Form Login di tengah layar
