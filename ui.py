@@ -18,9 +18,10 @@ st.set_page_config(page_title="Otak Kedua v5.1", page_icon="🧠", layout="wide"
 
 st.markdown("""
 <style>
-    header {visibility: hidden;}
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    header {background-color: transparent !important;}
+    [data-testid="stHeader"] {background-color: transparent !important;}
     
     /* Lebar Chat Tengah ala Gemini/ChatGPT */
     .block-container {
@@ -291,7 +292,7 @@ if p := st.chat_input("Tanya soal isi memori lu..."):
                 teks_sumber = "**Data yang dibaca AI:**\n\n"
                 for doc in res:
                     kumpulan_teks.append(doc.page_content)
-                    teks_sumber += f"📄 **{doc.metadata.get('source', 'Unknown')}**\n> {doc.page_content[:150]}...\n\n"
+                    teks_sumber += f"📄 **{doc.metadata.get('source', 'Unknown')}**\n> ...{doc.page_content[-150:]}\n\n"
                 context_gabungan = "\n\n---\n\n".join(kumpulan_teks)
                 
                 prompt_final = f"""Lu adalah asisten Otak Kedua. Tugas lu cuma jawab berdasarkan KONTEKS G-DRIVE di bawah ini.
