@@ -166,7 +166,7 @@ with st.sidebar:
         
         st.divider()
         st.subheader("🛠️ Sistem")
-        sel_model = st.selectbox("Model", ["gemini-1.5-flash", "gemini-1.5-pro"])
+        sel_model = st.selectbox("Model", ["gemini-2.5-flash", "gemini-2.5-pro"])
         if st.button("🔄 Sync G-Drive", use_container_width=True):
             s, m = sync_data()
             if s == "success": st.toast(f"Berhasil serap {m} data!", icon="✅")
