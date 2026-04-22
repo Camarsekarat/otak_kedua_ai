@@ -17,14 +17,21 @@ from langchain_community.vectorstores import FAISS
 st.set_page_config(page_title="Otak Kedua v4.0", page_icon="🧠", layout="wide")
 
 # >>> CUSTOM CSS UI PREMIUM <<<
+# >>> CUSTOM CSS ULTIMATE (MAIN CHAT + SIDEBAR) <<<
 st.markdown("""
 <style>
-    /* 1. Sembunyikan header/footer bawaan Streamlit biar clean */
+    /* Sembunyikan header/footer bawaan Streamlit */
     header {visibility: hidden;}
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* 1. Kunci Lebar Chat Utama di Tengah (Maks 850px) */
+    .block-container {
+        max-width: 850px !important;
+        padding-top: 2rem !important;
+    }
 
-    /* 2. Styling Chat Bubble User (Lebih gelap, melengkung ala iMessage/Gemini) */
+    /* 2. Styling Chat Bubble User */
     [data-testid="stChatMessage"]:has([alt="user avatar"]) {
         background-color: #2b313e;
         border-radius: 20px 20px 5px 20px;
@@ -33,22 +40,49 @@ st.markdown("""
         border: 1px solid #3c4456;
     }
 
-    /* 3. Styling Chat Bubble AI (Transparan, elegan, fokus ke teks) */
+    /* 3. Styling Chat Bubble AI */
     [data-testid="stChatMessage"]:has([alt="assistant avatar"]) {
         background-color: transparent;
         padding: 15px;
         margin-bottom: 15px;
     }
 
-    /* 4. Font dan Spasi di dalam chat */
-    [data-testid="stChatMessageContent"] {
-        font-family: 'Inter', 'Segoe UI', sans-serif;
-        font-size: 16px;
-        line-height: 1.6;
+    /* 4. MEROMBAK SIDEBAR MENJADI PREMIUM */
+    [data-testid="stSidebar"] {
+        background-color: #171923 !important; /* Warna dasar sangat gelap ala Claude */
+        border-right: 1px solid #2d3748 !important;
+    }
+    
+    /* Mempercantik font dan padding di Sidebar */
+    [data-testid="stSidebar"] .css-17lntkn {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* 5. Merombak Menu Expander (Menu Lipat) biar nggak kotak kaku */
+    div[data-testid="stExpander"] {
+        background-color: #1e2330 !important;
+        border: 1px solid #2d3748 !important;
+        border-radius: 12px !important;
+        overflow: hidden;
+    }
+    div[data-testid="stExpander"] summary {
+        background-color: #222736 !important;
+        padding: 10px !important;
+        border-radius: 12px !important;
+    }
+    
+    /* 6. Modifikasi Tombol di Sidebar */
+    .stButton > button {
+        border-radius: 8px !important;
+        border: 1px solid #3c4456 !important;
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        border-color: #63b3ed !important;
+        box-shadow: 0 0 10px rgba(99, 179, 237, 0.2);
     }
 </style>
 """, unsafe_allow_html=True)
-
 # --- 2. SISTEM LOGIN MURNI (ANTI-BUG) ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -205,6 +239,37 @@ with st.sidebar:
         if st.button("🔍 Cek Kuota SA", use_container_width=True):
             ok, p = cek_dan_bersihkan_sa()
             st.info(p)
+        
+        # (Kodingan lu sebelumnya: sel_model = st.selectbox("Otak AI"...))
+        
+        st.divider()
+        st.markdown("**🛡️ Pengaman Data**")
+        if st.button("💾 Backup Chat & Billing ke G-Drive", use_container_width=True):
+            with st.spinner("Mengamankan database..."):
+                try:
+                    # Ambil file JSON lokal
+                    with open("app_database.json", "r") as f:
+                        db_content = f.read()
+                    
+                    service = get_drive_service()
+                    
+                    # Cek apakah file backup udah ada di G-Drive
+                    q = f"'{FOLDER_ID}' in parents and name='backup_otak_kedua.json' and trashed=false"
+                    existing_files = service.files().list(q=q, fields="files(id)").execute().get('files', [])
+                    
+                    media = MediaIoBaseUpload(io.BytesIO(db_content.encode('utf-8')), mimetype='application/json', resumable=False)
+                    
+                    if existing_files:
+                        # Timpa file yang lama
+                        service.files().update(fileId=existing_files[0]['id'], media_body=media).execute()
+                    else:
+                        # Bikin file backup baru
+                        file_metadata = {'name': 'backup_otak_kedua.json', 'parents': [FOLDER_ID]}
+                        service.files().create(body=file_metadata, media_body=media).execute()
+                        
+                    st.success("✅ Database aman di G-Drive!")
+                except Exception as e:
+                    st.error(f"Gagal backup: {e}")
 
     st.divider()
     
