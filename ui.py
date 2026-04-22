@@ -16,6 +16,39 @@ from langchain_community.vectorstores import FAISS
 # --- 1. PAGE CONFIG ---
 st.set_page_config(page_title="Otak Kedua v4.0", page_icon="🧠", layout="wide")
 
+# >>> TAMBAHIN BLOK CSS INI DI SINI <<<
+st.markdown("""
+<style>
+    /* 1. Sembunyikan header/footer bawaan Streamlit biar clean */
+    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* 2. Styling Chat Bubble User (Lebih gelap, melengkung ala iMessage/Gemini) */
+    [data-testid="stChatMessage"]:has([alt="user avatar"]) {
+        background-color: #2b313e;
+        border-radius: 20px 20px 5px 20px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #3c4456;
+    }
+
+    /* 3. Styling Chat Bubble AI (Transparan, elegan, fokus ke teks) */
+    [data-testid="stChatMessage"]:has([alt="assistant avatar"]) {
+        background-color: transparent;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    /* 4. Font dan Spasi di dalam chat */
+    [data-testid="stChatMessageContent"] {
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- 2. SISTEM LOGIN MURNI (ANTI-BUG) ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -170,7 +203,7 @@ with st.sidebar:
         if st.button("🔄 Sync G-Drive", use_container_width=True):
             s, m = sync_data()
             if s == "success": st.toast(f"Berhasil serap {m} data!", icon="✅")
-            else: st.error(m)
+            else:    st.error(m)
         if st.button("🔍 Cek Kuota SA", use_container_width=True):
             ok, p = cek_dan_bersihkan_sa()
             st.info(p)
