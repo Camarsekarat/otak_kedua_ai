@@ -130,7 +130,7 @@ def sync_data():
         
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = splitter.split_documents(docs)
-        FAISS.from_documents(chunks, GoogleGenerativeAIEmbeddings(model="models/embedding-004", google_api_key=API_KEY)).save_local("db_ingatan_faiss")
+        FAISS.from_documents(chunks, GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=API_KEY)).save_local("db_ingatan_faiss")
         return "success", len(chunks)
     except Exception as e: return "error", str(e)
 
@@ -272,7 +272,7 @@ if p := st.chat_input("Tanya soal data di ingatan lu..."):
             if not os.path.exists("db_ingatan_faiss"):
                 ans = "Ingatan kosong Bre. Klik Sync G-Drive dulu di menu pengaturan!"
             else:
-                db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="models/embedding-004", google_api_key=API_KEY), allow_dangerous_deserialization=True)
+                db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
                 res = db.similarity_search(p, k=2)
                 context = "\n\n".join([d.page_content for d in res])
                 resp = llm.invoke(f"Gunakan konteks ini untuk menjawab:\n{context}\n\n Pertanyaan: {p}")
