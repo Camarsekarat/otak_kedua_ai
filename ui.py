@@ -141,68 +141,80 @@ def cek_dan_bersihkan_sa():
         return False, str(e)
 
 # --- 7. UI TOP BAR ---
+# --- 7. UI TOP BAR ---
 col_t, col_s = st.columns([0.7, 0.3])
 with col_t:
     st.title(f"🧠 {st.session_state.current_topic}")
 
 with col_s:
     with st.popover("⚙️ Menu & Billing", use_container_width=True):
-        st.subheader("📊 Estimasi Biaya")
-        st.session_state.kurs_idr = fetch_realtime_kurs()
-        price_in = (0.075/1e6) * st.session_state.kurs_idr
-        price_out = (0.30/1e6) * st.session_state.kurs_idr
-        cost = (st.session_state.total_tokens_in * price_in) + (st.session_state.total_tokens_out * price_out)
-        st.metric("Total Biaya", f"Rp {cost:,.2f}")
-        st.caption(f"Kurs: 1 USD = Rp {st.session_state.kurs_idr:,.0f}")
         
+        # BLOK 1: BILLING & PENGELUARAN
+        st.subheader("📊 Estimasi Pengeluaran (Sesi Ini)")
+        st.session_state.kurs_idr = fetch_realtime_kurs()
+        
+        # Kalkulasi Harga (Asumsi API Gemini 1.5 Flash)
+        price_in = (0.075 / 1e6) * st.session_state.kurs_idr
+        price_out = (0.30 / 1e6) * st.session_state.kurs_idr
+        
+        cost_in = st.session_state.total_tokens_in * price_in
+        cost_out = st.session_state.total_tokens_out * price_out
+        total_cost = cost_in + cost_out
+
+        # Tampilan Dashboard Mini
+        c1, c2 = st.columns(2)
+        c1.metric("Token Masuk", f"{st.session_state.total_tokens_in:,}")
+        c2.metric("Token Keluar", f"{st.session_state.total_tokens_out:,}")
+        
+        st.metric("Total Rupiah Kesedot", f"Rp {total_cost:,.2f}")
+        st.caption(f"💡 Kurs 1 USD = Rp {st.session_state.kurs_idr:,.0f}")
+        
+        st.divider()
+        
+        # BLOK 2: SUNTIK MEMORI (KHUSUS UPDATE)
         st.subheader("📝 Suntik Memori")
         fetch_files()
         opts = [f['name'] for f in st.session_state.file_list]
         
         if not opts:
-            st.warning("Belum ada file di G-Drive. Bikin Doc kosong dulu sana!")
+            st.warning("G-Drive kosong! Bikin Doc manual dulu dari browser.")
         else:
-            sel_file = st.selectbox("Pilih Target Catatan", opts)
-            isi_memori = st.text_area("Isi Tambahan Catatan")
+            sel_file = st.selectbox("Target Catatan", opts)
+            isi_memori = st.text_area("Isi Tambahan", height=100)
             
             if st.button("🚀 Suntik ke Drive", use_container_width=True):
                 if not isi_memori:
                     st.warning("Isi dulu dong datanya!")
                 else:
                     with st.spinner("Lagi nyuntik data..."):
+                        # Pastikan fungsi simpan_atau_update_memori lu udah versi update doang
                         ok, msg = simpan_atau_update_memori(sel_file, isi_memori)
                         if ok: st.success(msg)
                         else: st.error(f"Gagal: {msg}")
-            
-        isi_memori = st.text_area("Isi Catatan")
-        if st.button("🚀 Simpan ke Drive", use_container_width=True):
-            if (sel_file == "➕ Buat Catatan Baru" and not judul_baru) or not isi_memori:
-                st.warning("Isi dulu dong datanya!")
-            else:
-                with st.spinner("Lagi diantar kurir..."):
-                    ok, msg = simpan_atau_update_memori(sel_file, judul_baru, isi_memori)
-                    if ok: st.success(msg)
-                    else: st.error(f"Gagal: {msg}")
         
         st.divider()
-        sel_model = st.selectbox("Otak AI", ["gemini-2.5-flash", "gemini-2.5-pro"])
+        
+        # BLOK 3: ENGINE & SINKRONISASI
+        st.subheader("🧠 Mesin AI")
+        sel_model = st.selectbox("Pilih Otak", ["gemini-2.5-flash", "gemini-2.5-pro"])
         if st.button("🔄 Sync G-Drive", use_container_width=True):
             status, msg = sync_data()
             if status == "success": st.toast(f"Berhasil serap {msg} data!", icon="✅")
             else: st.error(msg)
-
-# (Kodingan lu sebelumnya ada di atas ini...)
-        
+            
         st.divider()
-        st.subheader("🗄️ Kuota Service Account")
+        
+        # BLOK 4: MAINTENANCE
+        st.subheader("🗄️ Maintenance")
         if st.button("🔍 Cek & Bersihkan Kuota SA", use_container_width=True):
             with st.spinner("Mengecek dompet Google..."):
                 ok, pesan = cek_dan_bersihkan_sa()
                 if ok:
                     st.info(pesan)
                 else:
-                    st.error(f"Gagal ngecek: {pesan}")
+                    st.error(f"Gagal: {pesan}")
 
+    
 # --- 8. UI SIDEBAR (CHAT HUB) ---
 with st.sidebar:
     st.markdown("<h1 style='text-align: center;'>🧠</h1>", unsafe_allow_html=True)
@@ -266,15 +278,18 @@ if p := st.chat_input("Tanya soal data di ingatan lu..."):
             if not os.path.exists("db_ingatan_faiss"):
                 ans = "Ingatan kosong Bre. Klik Sync G-Drive dulu di menu pengaturan!"
             else:
-                db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
+                db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
                 res = db.similarity_search(p, k=2)
                 context = "\n\n".join([d.page_content for d in res])
                 resp = llm.invoke(f"Gunakan konteks ini untuk menjawab:\n{context}\n\n Pertanyaan: {p}")
                 
-                # Update Meteran Token
-                if hasattr(resp, 'usage_metadata'):
-                    st.session_state.total_tokens_in += resp.usage_metadata.get('prompt_token_count', 0)
-                    st.session_state.total_tokens_out += resp.usage_metadata.get('candidates_token_count', 0)
+                # --- FIX METERAN TOKEN AI ---
+                if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                    st.session_state.total_tokens_in += resp.usage_metadata.get('input_tokens', 0)
+                    st.session_state.total_tokens_out += resp.usage_metadata.get('output_tokens', 0)
+                elif hasattr(resp, 'response_metadata') and 'token_usage' in resp.response_metadata:
+                    st.session_state.total_tokens_in += resp.response_metadata['token_usage'].get('prompt_tokens', 0)
+                    st.session_state.total_tokens_out += resp.response_metadata['token_usage'].get('completion_tokens', 0)
                 
                 ans = resp.content[0].get('text', str(resp.content)) if isinstance(resp.content, list) else resp.content
             
@@ -282,3 +297,10 @@ if p := st.chat_input("Tanya soal data di ingatan lu..."):
             st.session_state.chats[st.session_state.current_topic].append({"role": "assistant", "content": ans})
             st.rerun()
 
+# --- FIX METERAN TOKEN AI (WAJIB ADA DI MAIN CHAT LOGIC) ---
+if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                    st.session_state.total_tokens_in += resp.usage_metadata.get('input_tokens', 0)
+                    st.session_state.total_tokens_out += resp.usage_metadata.get('output_tokens', 0)
+elif hasattr(resp, 'response_metadata') and 'token_usage' in resp.response_metadata:
+                    st.session_state.total_tokens_in += resp.response_metadata['token_usage'].get('prompt_tokens', 0)
+                    st.session_state.total_tokens_out += resp.response_metadata['token_usage'].get('completion_tokens', 0)
