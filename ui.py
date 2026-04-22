@@ -89,34 +89,19 @@ def fetch_files():
         st.session_state.file_list = results.get('files', [])
     except: st.session_state.file_list = []
 
-def simpan_atau_update_memori(file_selection, judul_baru, isi):
+def simpan_atau_update_memori(file_selection, isi):
     try:
         service = get_drive_service()
-        if file_selection == "➕ Buat Catatan Baru":
-            file_metadata = {
-                'name': judul_baru, 
-                'parents': [FOLDER_ID], 
-                'mimeType': 'application/vnd.google-apps.document'
-            }
-            media = MediaIoBaseUpload(io.BytesIO(isi.encode('utf-8')), mimetype='text/plain', resumable=False)
-            file = service.files().create(body=file_metadata, media_body=media, fields='id', supportsAllDrives=True).execute()
-            file_id = file.get('id')
-            
-            # Transfer ownership
-            permission = {'type': 'user', 'role': 'owner', 'emailAddress': EMAIL_UTAMA}
-            service.permissions().create(fileId=file_id, body=permission, transferOwnership=True, supportsAllDrives=True).execute()
-        else:
-            f_id = next(f['id'] for f in st.session_state.file_list if f['name'] == file_selection)
-            old_content = service.files().export_media(fileId=f_id, mimeType='text/plain').execute().decode('utf-8')
-            new_text = old_content + "\n\n---\nUpdate:\n" + isi
-            media = MediaIoBaseUpload(io.BytesIO(new_text.encode('utf-8')), mimetype='text/plain', resumable=False)
-            service.files().update(fileId=f_id, media_body=media, supportsAllDrives=True).execute()
+        # Langsung cari file-nya dan timpa (update)
+        f_id = next(f['id'] for f in st.session_state.file_list if f['name'] == file_selection)
+        old_content = service.files().export_media(fileId=f_id, mimeType='text/plain').execute().decode('utf-8')
+        new_text = old_content + "\n\n---\nUpdate:\n" + isi
+        media = MediaIoBaseUpload(io.BytesIO(new_text.encode('utf-8')), mimetype='text/plain', resumable=False)
+        service.files().update(fileId=f_id, media_body=media, supportsAllDrives=True).execute()
         
-        fetch_files()
-        return True, "Berhasil! Memori sudah masuk ke ember lu."
+        return True, "Berhasil disuntik ke G-Drive!"
     except Exception as e:
         return False, str(e)
-
 def sync_data():
     try:
         service = get_drive_service()
@@ -170,15 +155,24 @@ with col_s:
         st.metric("Total Biaya", f"Rp {cost:,.2f}")
         st.caption(f"Kurs: 1 USD = Rp {st.session_state.kurs_idr:,.0f}")
         
-        st.divider()
-        st.subheader("📝 Input Memori")
+        st.subheader("📝 Suntik Memori")
         fetch_files()
-        opts = ["➕ Buat Catatan Baru"] + [f['name'] for f in st.session_state.file_list]
-        sel_file = st.selectbox("Pilih Target Catatan", opts)
+        opts = [f['name'] for f in st.session_state.file_list]
         
-        judul_baru = ""
-        if sel_file == "➕ Buat Catatan Baru":
-            judul_baru = st.text_input("Nama File Baru", placeholder="Misal: Riset Parfum")
+        if not opts:
+            st.warning("Belum ada file di G-Drive. Bikin Doc kosong dulu sana!")
+        else:
+            sel_file = st.selectbox("Pilih Target Catatan", opts)
+            isi_memori = st.text_area("Isi Tambahan Catatan")
+            
+            if st.button("🚀 Suntik ke Drive", use_container_width=True):
+                if not isi_memori:
+                    st.warning("Isi dulu dong datanya!")
+                else:
+                    with st.spinner("Lagi nyuntik data..."):
+                        ok, msg = simpan_atau_update_memori(sel_file, isi_memori)
+                        if ok: st.success(msg)
+                        else: st.error(f"Gagal: {msg}")
             
         isi_memori = st.text_area("Isi Catatan")
         if st.button("🚀 Simpan ke Drive", use_container_width=True):
