@@ -276,31 +276,30 @@ if p := st.chat_input("Tanya soal data di ingatan lu..."):
     with st.chat_message("assistant"):
         with st.spinner("Mencari di memori..."):
             if not os.path.exists("db_ingatan_faiss"):
-                ans = "Ingatan kosong Bre. Klik Sync G-Drive dulu di menu pengaturan!"
+                ans = "Ingatan kosong Bre. Bikin catatan dan klik Sync G-Drive dulu di menu pengaturan!"
             else:
-                db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
-                res = db.similarity_search(p, k=2)
-                context = "\n\n".join([d.page_content for d in res])
-                resp = llm.invoke(f"Gunakan konteks ini untuk menjawab:\n{context}\n\n Pertanyaan: {p}")
+                try:
+                    db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
+                    res = db.similarity_search(p, k=2)
+                    context = "\n\n".join([d.page_content for d in res])
+                    
+                    # AI MIKIR DI SINI (Variabel resp tercipta)
+                    resp = llm.invoke(f"Gunakan konteks ini untuk menjawab:\n{context}\n\n Pertanyaan: {p}")
+                    
+                    # --- METERAN TOKEN (Harus menjorok ke dalam sejajar dengan resp) ---
+                    if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                        st.session_state.total_tokens_in += resp.usage_metadata.get('input_tokens', 0)
+                        st.session_state.total_tokens_out += resp.usage_metadata.get('output_tokens', 0)
+                    elif hasattr(resp, 'response_metadata') and 'token_usage' in resp.response_metadata:
+                        st.session_state.total_tokens_in += resp.response_metadata['token_usage'].get('prompt_tokens', 0)
+                        st.session_state.total_tokens_out += resp.response_metadata['token_usage'].get('completion_tokens', 0)
+                    
+                    ans = resp.content[0].get('text', str(resp.content)) if isinstance(resp.content, list) else resp.content
                 
-                # --- FIX METERAN TOKEN AI ---
-                if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
-                    st.session_state.total_tokens_in += resp.usage_metadata.get('input_tokens', 0)
-                    st.session_state.total_tokens_out += resp.usage_metadata.get('output_tokens', 0)
-                elif hasattr(resp, 'response_metadata') and 'token_usage' in resp.response_metadata:
-                    st.session_state.total_tokens_in += resp.response_metadata['token_usage'].get('prompt_tokens', 0)
-                    st.session_state.total_tokens_out += resp.response_metadata['token_usage'].get('completion_tokens', 0)
-                
-                ans = resp.content[0].get('text', str(resp.content)) if isinstance(resp.content, list) else resp.content
-            
-            st.markdown(ans)
-            st.session_state.chats[st.session_state.current_topic].append({"role": "assistant", "content": ans})
-            st.rerun()
-
-# --- FIX METERAN TOKEN AI (WAJIB ADA DI MAIN CHAT LOGIC) ---
-if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
-                    st.session_state.total_tokens_in += resp.usage_metadata.get('input_tokens', 0)
-                    st.session_state.total_tokens_out += resp.usage_metadata.get('output_tokens', 0)
-elif hasattr(resp, 'response_metadata') and 'token_usage' in resp.response_metadata:
-                    st.session_state.total_tokens_in += resp.response_metadata['token_usage'].get('prompt_tokens', 0)
-                    st.session_state.total_tokens_out += resp.response_metadata['token_usage'].get('completion_tokens', 0)
+                except Exception as e:
+                    ans = f"Waduh, ada error pas mikir Bre: {e}"
+        
+        # Nampilin jawaban akhir ke layar
+        st.markdown(ans)
+        st.session_state.chats[st.session_state.current_topic].append({"role": "assistant", "content": ans})
+        st.rerun()
