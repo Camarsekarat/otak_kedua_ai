@@ -4,7 +4,7 @@ credentials:
       email: isa@nitiip.com
       name: Bos Isa
       # Ini adalah hash rahasia dari password "admin123"
-      password: $2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjIQYfwQjS
+      password: $2b$12$ULIVMDbV2OVBJXVDNaQkEe/OcpcrGhhqmOkCL/DfE.yyoPJb62nXq
 cookie:
   expiry_days: 30
   key: kunci_rahasia_otak_kedua_123

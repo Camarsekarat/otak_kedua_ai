@@ -15,6 +15,43 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 
+import streamlit as st
+import yaml
+from yaml.loader import SafeLoader
+import streamlit_authenticator as stauth
+
+# Baca database user
+try:
+    with open('config.yaml', 'r', encoding='utf-8') as file:
+        config = yaml.load(file, Loader=SafeLoader)
+except FileNotFoundError:
+    st.error("File config.yaml belum lu bikin!")
+    st.stop()
+
+# Inisialisasi gembok (VERSI TERBARU, PALING STABIL)
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
+)
+
+# Render Login
+authenticator.login()
+
+# Gerbang Keamanan
+if st.session_state.get("authentication_status"):
+    authenticator.logout('Keluar (Logout)', 'sidebar')
+    st.sidebar.write(f"Selamat datang, **{st.session_state['name']}** 🛡️")
+    st.sidebar.divider()
+    
+    # --- KODINGAN G-DRIVE DAN CHAT LU ADA DI BAWAH SINI SEMUA ---
+
+elif st.session_state.get("authentication_status") is False:
+    st.error("❌ Username atau Password salah, Bre!")
+elif st.session_state.get("authentication_status") is None:
+    st.warning("🔒 Silakan masukin kredensial lu buat buka Otak Kedua.")
+
 # --- 1. PAGE CONFIG ---
 st.set_page_config(page_title="Otak Kedua (Secure Online)", page_icon="🧠", layout="wide")
 
