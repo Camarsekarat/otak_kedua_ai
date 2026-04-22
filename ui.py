@@ -233,6 +233,43 @@ with st.sidebar:
 llm = ChatGoogleGenerativeAI(model=sel_model, google_api_key=API_KEY, temperature=0.3)
 
 for m in st.session_state.chats[st.session_state.current_topic]:
+    # Kalau role 'user' pake emoji orang/kacamata, kalau 'assistant' pake otak/robot
+    avatar_icon = "🧑‍💻" if m["role"] == "user" else "✨"
+    with st.chat_message(m["role"], avatar=avatar_icon): 
+        st.markdown(m["content"])
+
+if p := st.chat_input("Tanya soal memori lu..."):
+    # 2. Tangkap input user
+    st.session_state.chats[st.session_state.current_topic].append({"role": "user", "content": p})
+    with st.chat_message("user", avatar="🧑‍💻"): 
+        st.markdown(p)
+
+    # 3. Proses jawaban AI
+    with st.chat_message("assistant", avatar="✨"):
+        with st.spinner("Mencari..."):
+            if not os.path.exists("db_ingatan_faiss"):
+                ans = "Database kosong! Klik Sync G-Drive dulu."
+            else:
+                try:
+                    db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
+                    res = db.similarity_search(p, k=3)
+                    context = "\n\n".join([d.page_content for d in res])
+                    
+                    resp = llm.invoke(f"Konteks: {context}\n\n Pertanyaan: {p}")
+                    
+                    if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                        st.session_state.total_tokens_in += resp.usage_metadata.get('input_tokens', 0)
+                        st.session_state.total_tokens_out += resp.usage_metadata.get('output_tokens', 0)
+                    
+                    ans = resp.content
+                except Exception as e:
+                    ans = f"Error: {e}"
+        
+        st.markdown(ans)
+        st.session_state.chats[st.session_state.current_topic].append({"role": "assistant", "content": ans})
+        st.rerun()
+
+for m in st.session_state.chats[st.session_state.current_topic]:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
 if p := st.chat_input("Tanya soal memori lu..."):
