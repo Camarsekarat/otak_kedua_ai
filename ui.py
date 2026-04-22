@@ -130,9 +130,30 @@ def sync_data():
         
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = splitter.split_documents(docs)
-        FAISS.from_documents(chunks, GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=API_KEY)).save_local("db_ingatan_faiss")
+        FAISS.from_documents(chunks, GoogleGenerativeAIEmbeddings(model="models/embedding-004", google_api_key=API_KEY)).save_local("db_ingatan_faiss")
         return "success", len(chunks)
     except Exception as e: return "error", str(e)
+
+def cek_dan_bersihkan_sa():
+    try:
+        service = get_drive_service()
+        # Tarik data kuota
+        about = service.about().get(fields="storageQuota").execute()
+        quota = about['storageQuota']
+        limit = int(quota.get('limit', 15 * 1024**3)) / (1024**3)
+        used = int(quota.get('usage', 0)) / (1024**3)
+        sisa = limit - used
+        
+        # Kalau sisa kuota kurang dari 1 GB, otomatis bersihin tong sampah
+        status_trash = ""
+        if sisa < 1.0:
+            service.files().emptyTrash().execute()
+            status_trash = " 🧹 (Otomatis bersihin Trash!)"
+            
+        hasil_teks = f"Sisa: {sisa:.2f} GB (Pakai: {used:.2f} GB dari {limit:.0f} GB){status_trash}"
+        return True, hasil_teks
+    except Exception as e:
+        return False, str(e)
 
 # --- 7. UI TOP BAR ---
 col_t, col_s = st.columns([0.7, 0.3])
@@ -175,6 +196,18 @@ with col_s:
             status, msg = sync_data()
             if status == "success": st.toast(f"Berhasil serap {msg} data!", icon="✅")
             else: st.error(msg)
+
+# (Kodingan lu sebelumnya ada di atas ini...)
+        
+        st.divider()
+        st.subheader("🗄️ Kuota Service Account")
+        if st.button("🔍 Cek & Bersihkan Kuota SA", use_container_width=True):
+            with st.spinner("Mengecek dompet Google..."):
+                ok, pesan = cek_dan_bersihkan_sa()
+                if ok:
+                    st.info(pesan)
+                else:
+                    st.error(f"Gagal ngecek: {pesan}")
 
 # --- 8. UI SIDEBAR (CHAT HUB) ---
 with st.sidebar:
@@ -239,7 +272,7 @@ if p := st.chat_input("Tanya soal data di ingatan lu..."):
             if not os.path.exists("db_ingatan_faiss"):
                 ans = "Ingatan kosong Bre. Klik Sync G-Drive dulu di menu pengaturan!"
             else:
-                db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
+                db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="models/embedding-004", google_api_key=API_KEY), allow_dangerous_deserialization=True)
                 res = db.similarity_search(p, k=2)
                 context = "\n\n".join([d.page_content for d in res])
                 resp = llm.invoke(f"Gunakan konteks ini untuk menjawab:\n{context}\n\n Pertanyaan: {p}")
@@ -254,3 +287,4 @@ if p := st.chat_input("Tanya soal data di ingatan lu..."):
             st.markdown(ans)
             st.session_state.chats[st.session_state.current_topic].append({"role": "assistant", "content": ans})
             st.rerun()
+
