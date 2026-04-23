@@ -14,7 +14,7 @@ from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 
 # --- 1. PAGE CONFIG & PREMIUM UI ---
-st.set_page_config(page_title="Otak Kedua v5.2", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="Otak Kedua v5.3", page_icon="🧠", layout="wide")
 
 st.markdown("""
 <style>
@@ -46,34 +46,35 @@ st.markdown("""
         background-color: #131314 !important;
         border-right: 1px solid #282a2c !important;
     }
-    [data-testid="stSidebar"] .css-17lntkn {
-        font-family: 'Inter', sans-serif;
-    }
     
-    div[data-testid="stExpander"] {
-        background-color: #1e1f22 !important;
-        border: 1px solid #282a2c !important;
-        border-radius: 10px !important;
-        overflow: hidden;
-    }
-    div[data-testid="stExpander"] summary {
+    /* Tombol Secondary (Regenerate, Copy, History) -> DIBIKIN TELANJANG (Minimalis) */
+    .stButton > button[kind="secondary"], div[data-testid="stPopover"] > button {
         background-color: transparent !important;
-        padding: 12px !important;
+        border: none !important;
+        color: #9aa0a6 !important;
+        padding: 0 !important;
+        min-height: auto !important;
+        height: auto !important;
+        font-size: 14px !important;
+        box-shadow: none !important;
+        justify-content: flex-start !important;
     }
-    
-    /* Modifikasi Tombol Minimalis (Clean UI) */
-    .stButton > button {
-        background-color: #1e1f22 !important;
-        border: 1px solid transparent !important;
+    .stButton > button[kind="secondary"]:hover, div[data-testid="stPopover"] > button:hover {
+        color: #ffffff !important;
+        background-color: transparent !important;
+    }
+
+    /* Tombol Primary (Action Utama) -> Tetep ada bentuknya tapi elegan */
+    .stButton > button[kind="primary"] {
+        background-color: #2b313e !important;
+        border: 1px solid #3c4456 !important;
         border-radius: 6px !important;
         color: #d1d5db !important;
-        transition: all 0.2s ease;
     }
-    .stButton > button:hover {
-        background-color: #2b2d31 !important;
-        border: 1px solid #383a40 !important;
-        color: #ffffff !important;
-        box-shadow: none !important; /* Hilangkan efek neon */
+    .stButton > button[kind="primary"]:hover {
+        background-color: #3b4252 !important;
+        border-color: #4c566a !important;
+        color: white !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -100,10 +101,7 @@ def load_db():
     return {"chats": {"Chat Utama": []}, "billing": {}}
 
 def save_db():
-    data = {
-        "chats": st.session_state.chats,
-        "billing": st.session_state.billing
-    }
+    data = {"chats": st.session_state.chats, "billing": st.session_state.billing}
     with open(DB_FILE, "w") as f:
         json.dump(data, f)
 
@@ -112,7 +110,6 @@ if "chats" not in st.session_state: st.session_state.chats = db_data["chats"]
 if "billing" not in st.session_state: st.session_state.billing = db_data["billing"]
 if "current_topic" not in st.session_state: st.session_state.current_topic = list(st.session_state.chats.keys())[0]
 if "file_list" not in st.session_state: st.session_state.file_list = []
-if "kurs_idr" not in st.session_state: st.session_state.kurs_idr = 16000.0
 
 # --- 4. BACKEND FUNCTIONS ---
 @st.cache_data(ttl=3600)
@@ -156,46 +153,36 @@ def simpan_atau_update_memori(file_selection, isi):
         media = MediaIoBaseUpload(io.BytesIO(new_text.encode('utf-8')), mimetype='text/plain', resumable=False)
         service.files().update(fileId=f_id, media_body=media, supportsAllDrives=True).execute()
         sync_data()
-        return True, "Suntikan berhasil & Auto-Sync selesai!"
-    except Exception as e:
-        return False, str(e)
+        return True, "Berhasil disuntik!"
+    except Exception as e: return False, str(e)
 
 def hitung_biaya(tokens_in, tokens_out):
-    st.session_state.kurs_idr = fetch_realtime_kurs()
-    p_in = (0.075/1e6) * st.session_state.kurs_idr
-    p_out = (0.30/1e6) * st.session_state.kurs_idr
-    return (tokens_in * p_in) + (tokens_out * p_out)
+    kurs = fetch_realtime_kurs()
+    return (tokens_in * ((0.075/1e6)*kurs)) + (tokens_out * ((0.30/1e6)*kurs))
 
-# --- 5. SISTEM LOGIN (AUTO-SYNC AMAN) ---
+# --- 5. SISTEM LOGIN ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'>🔒 Login Otak Kedua</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>🔒 Login</h2>", unsafe_allow_html=True)
         inp_user = st.text_input("Username")
         inp_pass = st.text_input("Password", type="password")
-        if st.button("Masuk", use_container_width=True):
-            try:
-                if inp_user == st.secrets["APP_USER"] and inp_pass == st.secrets["APP_PASS"]:
-                    st.session_state.logged_in = True
-                    # Auto-Sync setelah sukses login
-                    with st.spinner("Sinkronisasi memori awal dari G-Drive..."):
-                        sync_data()
-                    st.rerun() 
-                else:
-                    st.error("❌ Username atau Password salah!")
-            except KeyError:
-                st.error("Tambahin APP_USER dan APP_PASS di Streamlit Secrets!")
-            except Exception as e:
-                st.error(f"Error sistem: {e}")
+        if st.button("Masuk", type="primary", use_container_width=True):
+            if inp_user == st.secrets.get("APP_USER") and inp_pass == st.secrets.get("APP_PASS"):
+                st.session_state.logged_in = True
+                if not os.path.exists("db_ingatan_faiss"):
+                    with st.spinner("Sync awal..."): sync_data()
+                st.rerun() 
+            else: st.error("❌ Salah, Bre!")
     st.stop()
 
 # --- 6. UI SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='text-align: center;'>🧠</h1>", unsafe_allow_html=True)
-    if st.button("➕ Chat Baru", use_container_width=True):
+    if st.button("➕ Chat Baru", type="primary", use_container_width=True):
         new_id = f"Chat {len(st.session_state.chats) + 1}"
         st.session_state.chats[new_id] = []
         st.session_state.current_topic = new_id
@@ -203,180 +190,129 @@ with st.sidebar:
         st.rerun()
     st.divider()
 
-    with st.expander("📝 Suntik & Sistem AI", expanded=False):
+    with st.expander("📝 Suntik Memori", expanded=False):
         fetch_files()
         opts = [f['name'] for f in st.session_state.file_list]
         if opts:
-            sel_file = st.selectbox("Target Catatan", opts)
+            sel_file = st.selectbox("Target", opts)
             isi_memori = st.text_area("Isi Tambahan", height=100)
-            if st.button("🚀 Suntik & Auto-Sync", use_container_width=True):
-                if isi_memori:
-                    with st.spinner("Menyuntik..."):
-                        ok, msg = simpan_atau_update_memori(sel_file, isi_memori)
-                        if ok: st.success(msg)
-                        else: st.error(msg)
+            if st.button("🚀 Suntik & Sync", type="primary", use_container_width=True):
+                with st.spinner("Menyuntik..."):
+                    ok, msg = simpan_atau_update_memori(sel_file, isi_memori)
+                    if ok: st.success(msg)
+                    else: st.error(msg)
         st.divider()
-        sel_model = st.selectbox("Otak AI", ["gemini-2.5-flash", "gemini-2.5-pro"])
-        
-        st.divider()
-        st.markdown("**🛡️ Pengaman Data**")
-        if st.button("💾 Backup DB ke G-Drive", use_container_width=True):
-            with st.spinner("Mengamankan..."):
+        if st.button("💾 Backup DB", type="primary", use_container_width=True):
+            with st.spinner("Backup..."):
                 try:
-                    with open(DB_FILE, "r") as f:
-                        db_content = f.read()
+                    with open(DB_FILE, "r") as f: db_content = f.read()
                     service = get_drive_service()
                     q = f"'{FOLDER_ID}' in parents and name='backup_otak_kedua.json' and trashed=false"
-                    existing_files = service.files().list(q=q, fields="files(id)").execute().get('files', [])
+                    files = service.files().list(q=q, fields="files(id)").execute().get('files', [])
                     media = MediaIoBaseUpload(io.BytesIO(db_content.encode('utf-8')), mimetype='application/json', resumable=False)
-                    if existing_files:
-                        service.files().update(fileId=existing_files[0]['id'], media_body=media).execute()
-                    else:
-                        file_metadata = {'name': 'backup_otak_kedua.json', 'parents': [FOLDER_ID]}
-                        service.files().create(body=file_metadata, media_body=media).execute()
-                    st.success("✅ Database aman di G-Drive!")
-                except Exception as e:
-                    st.error(f"Gagal backup: {e}")
+                    if files: service.files().update(fileId=files[0]['id'], media_body=media).execute()
+                    else: service.files().create(body={'name': 'backup_otak_kedua.json', 'parents': [FOLDER_ID]}, media_body=media).execute()
+                    st.success("✅ Aman!")
+                except: st.error("Gagal backup")
 
-    with st.expander("📊 Laporan Billing", expanded=False):
-        today_str = datetime.date.today().isoformat()
-        t_in_hari_ini = st.session_state.billing.get(today_str, {}).get("in", 0)
-        t_out_hari_ini = st.session_state.billing.get(today_str, {}).get("out", 0)
-        t_in_total = sum(d.get("in", 0) for d in st.session_state.billing.values())
-        t_out_total = sum(d.get("out", 0) for d in st.session_state.billing.values())
-        
-        st.markdown("**Hari Ini:**")
-        st.metric("Rupiah", f"Rp {hitung_biaya(t_in_hari_ini, t_out_hari_ini):,.2f}")
-        st.markdown("**Total Keseluruhan:**")
-        st.metric("Rupiah", f"Rp {hitung_biaya(t_in_total, t_out_total):,.2f}")
+    with st.expander("📊 Billing", expanded=False):
+        t_str = datetime.date.today().isoformat()
+        t_in = st.session_state.billing.get(t_str, {}).get("in", 0)
+        t_out = st.session_state.billing.get(t_str, {}).get("out", 0)
+        st.metric("Hari Ini", f"Rp {hitung_biaya(t_in, t_out):,.2f}")
 
     st.divider()
     st.markdown("### Riwayat Chat")
     for t in list(st.session_state.chats.keys()):
-        col1, col2 = st.columns([0.8, 0.2])
-        with col1:
-            if st.button(f"🗨️ {t}", key=f"t_{t}", use_container_width=True, type="primary" if t == st.session_state.current_topic else "secondary"):
+        c1, c2 = st.columns([0.8, 0.2])
+        with c1:
+            # History jadi secondary biar "telanjang" & minimalis
+            if st.button(f"🗨️ {t}", key=f"t_{t}", type="secondary", use_container_width=True):
                 st.session_state.current_topic = t
                 st.rerun()
-        with col2:
-            if st.button("🗑️", key=f"del_{t}"):
+        with c2:
+            if st.button("🗑️", key=f"del_{t}", type="secondary"):
                 if len(st.session_state.chats) > 1:
                     del st.session_state.chats[t]
                     st.session_state.current_topic = list(st.session_state.chats.keys())[0]
                     save_db()
                     st.rerun()
 
-# --- 7. MAIN CHAT LOGIC (HYBRID PROMPT) ---
-# --- 7. MAIN CHAT LOGIC (HYBRID PROMPT + REGENERATE & COPY) ---
+# --- 7. MAIN CHAT LOGIC ---
 st.title(f"🧠 {st.session_state.current_topic}")
-
-llm = ChatGoogleGenerativeAI(model=sel_model, google_api_key=API_KEY, temperature=0.3)
 
 # Render Riwayat Obrolan
 for m in st.session_state.chats[st.session_state.current_topic]:
     with st.chat_message(m["role"], avatar="🧑‍💻" if m["role"] == "user" else "✨"): 
         st.markdown(m["content"])
         if "sumber" in m and m["sumber"]:
-            with st.expander("🔍 Intip Sumber Data"):
-                st.markdown(m["sumber"])
+            with st.expander("🔍 Intip Sumber Data"): st.markdown(m["sumber"])
 
-# --- TOMBOL REGENERATE & COPY (Cuma muncul di bawah jawaban AI terakhir) ---
+# --- TOMBOL MINIMALIS DI BAWAH CHAT TERAKHIR ---
 chat_history = st.session_state.chats[st.session_state.current_topic]
 regen_trigger = False
 
 if len(chat_history) > 0 and chat_history[-1]["role"] == "assistant":
-    # Bikin 2 kolom kecil di sebelah kiri
     col1, col2, col3 = st.columns([0.15, 0.15, 0.7])
     with col1:
-        if st.button("🔄 Regenerate", use_container_width=True):
+        # Pake type="secondary" biar dapet CSS telanjang
+        if st.button("🔄 Regenerate", type="secondary", use_container_width=True):
             regen_trigger = True
     with col2:
-        # Trik Copy elegan pakai Popover & Code Block
         with st.popover("📋 Salin", use_container_width=True):
-            st.caption("Klik logo copy di pojok kanan kotak ini 👇")
+            st.caption("Klik logo copy di bawah 👇")
             st.code(chat_history[-1]["content"], language="markdown")
 
-# Tangkap Input
+# --- PINDAHIN MODEL AI KE DEKET INPUT CHAT ---
+st.write("") # Spasi dikit
+c_kosong, c_model = st.columns([0.8, 0.2])
+with c_model:
+    sel_model = st.selectbox("Model", ["gemini-2.5-flash", "gemini-2.5-pro"], label_visibility="collapsed")
+
+# Tangkap Input User
 p = st.chat_input("Tanya soal isi memori lu...")
+llm = ChatGoogleGenerativeAI(model=sel_model, google_api_key=API_KEY, temperature=0.3)
 
-# Jalankan mesin JIKA ada prompt baru ATAU tombol regenerate diklik
 if p or regen_trigger:
-    
-    # Logika Time Travel buat Regenerate
     if regen_trigger:
-        # Hapus jawaban AI terakhir
         st.session_state.chats[st.session_state.current_topic].pop()
-        # Ambil pertanyaan lu yang terakhir
         p = st.session_state.chats[st.session_state.current_topic][-1]["content"]
-        # Hapus pertanyaan lu dari layar biar nggak ke-print dobel
         st.session_state.chats[st.session_state.current_topic].pop()
 
-    # Append Pertanyaan ke Layar & Database
     st.session_state.chats[st.session_state.current_topic].append({"role": "user", "content": p})
-    with st.chat_message("user", avatar="🧑‍💻"): 
-        st.markdown(p)
+    with st.chat_message("user", avatar="🧑‍💻"): st.markdown(p)
     save_db()
 
-    # Mesin AI Mulai Berpikir
     with st.chat_message("assistant", avatar="✨"):
         if not os.path.exists("db_ingatan_faiss"):
-            st.error("Database memori kosong, Bre! Suntik data dulu di Menu Samping.")
+            st.error("Suntik data dulu di Menu Samping.")
         else:
             try:
                 db = FAISS.load_local("db_ingatan_faiss", GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=API_KEY), allow_dangerous_deserialization=True)
                 res = db.similarity_search(p, k=3)
                 
-                kumpulan_teks = []
                 teks_sumber = "**Data yang dibaca AI:**\n\n"
-                for doc in res:
-                    kumpulan_teks.append(doc.page_content)
-                    teks_sumber += f"📄 **{doc.metadata.get('source', 'Unknown')}**\n> ...{doc.page_content[-150:]}\n\n"
-                context_gabungan = "\n\n---\n\n".join(kumpulan_teks)
+                for doc in res: teks_sumber += f"📄 **{doc.metadata.get('source')}**\n> ...{doc.page_content[-150:]}\n\n"
+                context_gabungan = "\n\n---\n\n".join([d.page_content for d in res])
                 
-                # PROMPT HYBRID
-                prompt_final = f"""Lu adalah asisten Otak Kedua. 
-Tugas utama lu: Jawab pertanyaan user.
-
-1. CEK KONTEKS G-DRIVE di bawah ini. Jika ada informasi yang relevan, utamakan jawaban dari konteks tersebut.
-2. JIKA DI KONTEKS TIDAK ADA, LU BOLEH JAWAB menggunakan pengetahuan umum AI lu. 
-Namun, awali jawaban lu dengan kalimat: "Di ingatan G-Drive lu belum ada spesifik soal ini Bre, tapi menurut gue..."
-
-KONTEKS G-DRIVE:
-{context_gabungan}
-
-PERTANYAAN USER: {p}
-"""
-                with st.expander("🔍 Intip Sumber Data"):
-                    st.markdown(teks_sumber)
+                prompt_final = f"Lu asisten Otak Kedua. 1. Jawab pakai KONTEKS G-DRIVE. 2. JIKA DI KONTEKS G-DRIVE TIDAK ADA, LU BOLEH JAWAB pake pengetahuan umum tapi awali dengan 'Di ingatan G-Drive belum ada Bre, tapi menurut gue...'\n\nKONTEKS: {context_gabungan}\n\nPERTANYAAN: {p}"
+                
+                with st.expander("🔍 Intip Sumber Data"): st.markdown(teks_sumber)
 
                 response_placeholder = st.empty()
                 full_answer = ""
-                
-                # Streaming Jawaban (Ngetik Realtime)
                 for chunk in llm.stream(prompt_final):
                     full_answer += chunk.content
                     response_placeholder.markdown(full_answer + " ▌") 
-                
                 response_placeholder.markdown(full_answer)
                 
-                # Simpan ke memori Chat
-                st.session_state.chats[st.session_state.current_topic].append({
-                    "role": "assistant", 
-                    "content": full_answer,
-                    "sumber": teks_sumber
-                })
+                st.session_state.chats[st.session_state.current_topic].append({"role": "assistant", "content": full_answer, "sumber": teks_sumber})
                 
-                # Hitung Tagihan
-                today_str = datetime.date.today().isoformat()
-                if today_str not in st.session_state.billing:
-                    st.session_state.billing[today_str] = {"in": 0, "out": 0}
-                
-                st.session_state.billing[today_str]["in"] += len(prompt_final.split()) * 1.3
-                st.session_state.billing[today_str]["out"] += len(full_answer.split()) * 1.3
+                t_str = datetime.date.today().isoformat()
+                if t_str not in st.session_state.billing: st.session_state.billing[t_str] = {"in": 0, "out": 0}
+                st.session_state.billing[t_str]["in"] += len(prompt_final.split()) * 1.3
+                st.session_state.billing[t_str]["out"] += len(full_answer.split()) * 1.3
                 save_db() 
-                
-                # Rerun paksa buat nampilin tombol Regenerate & Copy di bawah teks baru
                 st.rerun()
 
-            except Exception as e:
-                st.error(f"Error dari mesin AI: {e}")
+            except Exception as e: st.error(f"Error AI: {e}")
