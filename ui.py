@@ -61,14 +61,19 @@ st.markdown("""
         padding: 12px !important;
     }
     
+    /* Modifikasi Tombol Minimalis (Clean UI) */
     .stButton > button {
-        border-radius: 8px !important;
-        border: 1px solid #3c4456 !important;
-        transition: all 0.3s ease;
+        background-color: #1e1f22 !important;
+        border: 1px solid transparent !important;
+        border-radius: 6px !important;
+        color: #d1d5db !important;
+        transition: all 0.2s ease;
     }
     .stButton > button:hover {
-        border-color: #63b3ed !important;
-        box-shadow: 0 0 10px rgba(99, 179, 237, 0.2);
+        background-color: #2b2d31 !important;
+        border: 1px solid #383a40 !important;
+        color: #ffffff !important;
+        box-shadow: none !important; /* Hilangkan efek neon */
     }
 </style>
 """, unsafe_allow_html=True)
