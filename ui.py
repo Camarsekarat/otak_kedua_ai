@@ -262,10 +262,12 @@ with st.sidebar:
                     st.rerun()
 
 # --- 7. MAIN CHAT LOGIC (HYBRID PROMPT) ---
+# --- 7. MAIN CHAT LOGIC (HYBRID PROMPT + REGENERATE & COPY) ---
 st.title(f"🧠 {st.session_state.current_topic}")
 
 llm = ChatGoogleGenerativeAI(model=sel_model, google_api_key=API_KEY, temperature=0.3)
 
+# Render Riwayat Obrolan
 for m in st.session_state.chats[st.session_state.current_topic]:
     with st.chat_message(m["role"], avatar="🧑‍💻" if m["role"] == "user" else "✨"): 
         st.markdown(m["content"])
@@ -273,12 +275,44 @@ for m in st.session_state.chats[st.session_state.current_topic]:
             with st.expander("🔍 Intip Sumber Data"):
                 st.markdown(m["sumber"])
 
-if p := st.chat_input("Tanya soal isi memori lu..."):
+# --- TOMBOL REGENERATE & COPY (Cuma muncul di bawah jawaban AI terakhir) ---
+chat_history = st.session_state.chats[st.session_state.current_topic]
+regen_trigger = False
+
+if len(chat_history) > 0 and chat_history[-1]["role"] == "assistant":
+    # Bikin 2 kolom kecil di sebelah kiri
+    col1, col2, col3 = st.columns([0.15, 0.15, 0.7])
+    with col1:
+        if st.button("🔄 Regenerate", use_container_width=True):
+            regen_trigger = True
+    with col2:
+        # Trik Copy elegan pakai Popover & Code Block
+        with st.popover("📋 Salin", use_container_width=True):
+            st.caption("Klik logo copy di pojok kanan kotak ini 👇")
+            st.code(chat_history[-1]["content"], language="markdown")
+
+# Tangkap Input
+p = st.chat_input("Tanya soal isi memori lu...")
+
+# Jalankan mesin JIKA ada prompt baru ATAU tombol regenerate diklik
+if p or regen_trigger:
+    
+    # Logika Time Travel buat Regenerate
+    if regen_trigger:
+        # Hapus jawaban AI terakhir
+        st.session_state.chats[st.session_state.current_topic].pop()
+        # Ambil pertanyaan lu yang terakhir
+        p = st.session_state.chats[st.session_state.current_topic][-1]["content"]
+        # Hapus pertanyaan lu dari layar biar nggak ke-print dobel
+        st.session_state.chats[st.session_state.current_topic].pop()
+
+    # Append Pertanyaan ke Layar & Database
     st.session_state.chats[st.session_state.current_topic].append({"role": "user", "content": p})
     with st.chat_message("user", avatar="🧑‍💻"): 
         st.markdown(p)
     save_db()
 
+    # Mesin AI Mulai Berpikir
     with st.chat_message("assistant", avatar="✨"):
         if not os.path.exists("db_ingatan_faiss"):
             st.error("Database memori kosong, Bre! Suntik data dulu di Menu Samping.")
@@ -291,16 +325,15 @@ if p := st.chat_input("Tanya soal isi memori lu..."):
                 teks_sumber = "**Data yang dibaca AI:**\n\n"
                 for doc in res:
                     kumpulan_teks.append(doc.page_content)
-                    # Menampilkan ujung kalimat (fix [-150:])
                     teks_sumber += f"📄 **{doc.metadata.get('source', 'Unknown')}**\n> ...{doc.page_content[-150:]}\n\n"
                 context_gabungan = "\n\n---\n\n".join(kumpulan_teks)
                 
-                # PROMPT HYBRID: Pintar baca data, bisa jawab pengetahuan umum
+                # PROMPT HYBRID
                 prompt_final = f"""Lu adalah asisten Otak Kedua. 
 Tugas utama lu: Jawab pertanyaan user.
 
 1. CEK KONTEKS G-DRIVE di bawah ini. Jika ada informasi yang relevan, utamakan jawaban dari konteks tersebut.
-2. JIKA DI KONTEKS TIDAK ADA (misal nanya saran, opini, atau trik umum), LU BOLEH JAWAB menggunakan pengetahuan umum AI lu. 
+2. JIKA DI KONTEKS TIDAK ADA, LU BOLEH JAWAB menggunakan pengetahuan umum AI lu. 
 Namun, awali jawaban lu dengan kalimat: "Di ingatan G-Drive lu belum ada spesifik soal ini Bre, tapi menurut gue..."
 
 KONTEKS G-DRIVE:
@@ -314,18 +347,21 @@ PERTANYAAN USER: {p}
                 response_placeholder = st.empty()
                 full_answer = ""
                 
+                # Streaming Jawaban (Ngetik Realtime)
                 for chunk in llm.stream(prompt_final):
                     full_answer += chunk.content
                     response_placeholder.markdown(full_answer + " ▌") 
                 
                 response_placeholder.markdown(full_answer)
                 
+                # Simpan ke memori Chat
                 st.session_state.chats[st.session_state.current_topic].append({
                     "role": "assistant", 
                     "content": full_answer,
                     "sumber": teks_sumber
                 })
                 
+                # Hitung Tagihan
                 today_str = datetime.date.today().isoformat()
                 if today_str not in st.session_state.billing:
                     st.session_state.billing[today_str] = {"in": 0, "out": 0}
@@ -333,6 +369,9 @@ PERTANYAAN USER: {p}
                 st.session_state.billing[today_str]["in"] += len(prompt_final.split()) * 1.3
                 st.session_state.billing[today_str]["out"] += len(full_answer.split()) * 1.3
                 save_db() 
+                
+                # Rerun paksa buat nampilin tombol Regenerate & Copy di bawah teks baru
+                st.rerun()
 
             except Exception as e:
                 st.error(f"Error dari mesin AI: {e}")
