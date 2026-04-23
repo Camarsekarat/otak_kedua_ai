@@ -14,7 +14,7 @@ from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 
 # --- 1. PAGE CONFIG & PREMIUM UI ---
-st.set_page_config(page_title="Otak Kedua v5.1", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="Otak Kedua v5.2", page_icon="🧠", layout="wide")
 
 st.markdown("""
 <style>
@@ -23,13 +23,11 @@ st.markdown("""
     header {background-color: transparent !important;}
     [data-testid="stHeader"] {background-color: transparent !important;}
     
-    /* Lebar Chat Tengah ala Gemini/ChatGPT */
     .block-container {
         max-width: 800px !important;
         padding-top: 1rem !important;
     }
 
-    /* Bubble User (Lu) */
     [data-testid="stChatMessage"]:has([alt="user avatar"]) {
         background-color: #1e1f22; 
         border-radius: 20px 20px 5px 20px;
@@ -38,14 +36,12 @@ st.markdown("""
         border: 1px solid #2d3036;
     }
 
-    /* Bubble AI (Transparan, Rata Kiri) */
     [data-testid="stChatMessage"]:has([alt="assistant avatar"]) {
         background-color: transparent;
         padding: 10px 0;
         margin-bottom: 20px;
     }
 
-    /* Sidebar Clean ala Gemini */
     [data-testid="stSidebar"] {
         background-color: #131314 !important;
         border-right: 1px solid #282a2c !important;
@@ -54,7 +50,6 @@ st.markdown("""
         font-family: 'Inter', sans-serif;
     }
     
-    /* Modifikasi Menu Expander */
     div[data-testid="stExpander"] {
         background-color: #1e1f22 !important;
         border: 1px solid #282a2c !important;
@@ -66,7 +61,6 @@ st.markdown("""
         padding: 12px !important;
     }
     
-    /* Modifikasi Tombol di Sidebar */
     .stButton > button {
         border-radius: 8px !important;
         border: 1px solid #3c4456 !important;
@@ -79,28 +73,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SISTEM LOGIN ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        st.markdown("<h2 style='text-align: center;'>🔒 Login Otak Kedua</h2>", unsafe_allow_html=True)
-        inp_user = st.text_input("Username")
-        inp_pass = st.text_input("Password", type="password")
-        if st.button("Masuk", use_container_width=True):
-            try:
-                if inp_user == st.secrets["APP_USER"] and inp_pass == st.secrets["APP_PASS"]:
-                    st.session_state.logged_in = True
-                    st.rerun() 
-                else:
-                    st.error("❌ Username atau Password salah!")
-            except KeyError:
-                st.error("Tambahin APP_USER dan APP_PASS di Streamlit Secrets!")
-    st.stop()
-
-# --- 3. KONFIGURASI API ---
+# --- 2. KONFIGURASI API ---
 try:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
     FOLDER_ID = st.secrets["GDRIVE_FOLDER_ID"]
@@ -112,7 +85,7 @@ except Exception as e:
     st.error(f"Error Secrets: {e}")
     st.stop()
 
-# --- 4. DATABASE LOKAL (ANTI HILANG) ---
+# --- 3. DATABASE LOKAL & SESSION STATE ---
 DB_FILE = "app_database.json"
 
 def load_db():
@@ -136,7 +109,7 @@ if "current_topic" not in st.session_state: st.session_state.current_topic = lis
 if "file_list" not in st.session_state: st.session_state.file_list = []
 if "kurs_idr" not in st.session_state: st.session_state.kurs_idr = 16000.0
 
-# --- 5. BACKEND FUNCTIONS ---
+# --- 4. BACKEND FUNCTIONS ---
 @st.cache_data(ttl=3600)
 def fetch_realtime_kurs():
     try:
@@ -188,6 +161,32 @@ def hitung_biaya(tokens_in, tokens_out):
     p_out = (0.30/1e6) * st.session_state.kurs_idr
     return (tokens_in * p_in) + (tokens_out * p_out)
 
+# --- 5. SISTEM LOGIN (AUTO-SYNC AMAN) ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.markdown("<h2 style='text-align: center;'>🔒 Login Otak Kedua</h2>", unsafe_allow_html=True)
+        inp_user = st.text_input("Username")
+        inp_pass = st.text_input("Password", type="password")
+        if st.button("Masuk", use_container_width=True):
+            try:
+                if inp_user == st.secrets["APP_USER"] and inp_pass == st.secrets["APP_PASS"]:
+                    st.session_state.logged_in = True
+                    # Auto-Sync setelah sukses login
+                    with st.spinner("Sinkronisasi memori awal dari G-Drive..."):
+                        sync_data()
+                    st.rerun() 
+                else:
+                    st.error("❌ Username atau Password salah!")
+            except KeyError:
+                st.error("Tambahin APP_USER dan APP_PASS di Streamlit Secrets!")
+            except Exception as e:
+                st.error(f"Error sistem: {e}")
+    st.stop()
+
 # --- 6. UI SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='text-align: center;'>🧠</h1>", unsafe_allow_html=True)
@@ -219,7 +218,7 @@ with st.sidebar:
         if st.button("💾 Backup DB ke G-Drive", use_container_width=True):
             with st.spinner("Mengamankan..."):
                 try:
-                    with open("app_database.json", "r") as f:
+                    with open(DB_FILE, "r") as f:
                         db_content = f.read()
                     service = get_drive_service()
                     q = f"'{FOLDER_ID}' in parents and name='backup_otak_kedua.json' and trashed=false"
@@ -262,10 +261,10 @@ with st.sidebar:
                     save_db()
                     st.rerun()
 
-# --- 7. MAIN CHAT LOGIC ---
+# --- 7. MAIN CHAT LOGIC (HYBRID PROMPT) ---
 st.title(f"🧠 {st.session_state.current_topic}")
 
-llm = ChatGoogleGenerativeAI(model=sel_model, google_api_key=API_KEY, temperature=0.1)
+llm = ChatGoogleGenerativeAI(model=sel_model, google_api_key=API_KEY, temperature=0.3)
 
 for m in st.session_state.chats[st.session_state.current_topic]:
     with st.chat_message(m["role"], avatar="🧑‍💻" if m["role"] == "user" else "✨"): 
@@ -292,11 +291,17 @@ if p := st.chat_input("Tanya soal isi memori lu..."):
                 teks_sumber = "**Data yang dibaca AI:**\n\n"
                 for doc in res:
                     kumpulan_teks.append(doc.page_content)
+                    # Menampilkan ujung kalimat (fix [-150:])
                     teks_sumber += f"📄 **{doc.metadata.get('source', 'Unknown')}**\n> ...{doc.page_content[-150:]}\n\n"
                 context_gabungan = "\n\n---\n\n".join(kumpulan_teks)
                 
-                prompt_final = f"""Lu adalah asisten Otak Kedua. Tugas lu cuma jawab berdasarkan KONTEKS G-DRIVE di bawah ini.
-Jika jawaban TIDAK ADA di konteks, lu wajib bilang: "Wah, datanya belum ada di memori gue nih, Bre. Coba suntik data barunya dulu." JANGAN ngarang atau ambil dari internet.
+                # PROMPT HYBRID: Pintar baca data, bisa jawab pengetahuan umum
+                prompt_final = f"""Lu adalah asisten Otak Kedua. 
+Tugas utama lu: Jawab pertanyaan user.
+
+1. CEK KONTEKS G-DRIVE di bawah ini. Jika ada informasi yang relevan, utamakan jawaban dari konteks tersebut.
+2. JIKA DI KONTEKS TIDAK ADA (misal nanya saran, opini, atau trik umum), LU BOLEH JAWAB menggunakan pengetahuan umum AI lu. 
+Namun, awali jawaban lu dengan kalimat: "Di ingatan G-Drive lu belum ada spesifik soal ini Bre, tapi menurut gue..."
 
 KONTEKS G-DRIVE:
 {context_gabungan}
